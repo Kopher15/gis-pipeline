@@ -10,7 +10,11 @@ const pool = new Pool({
   password: process.env.DB_PASSWORD,
   max: 10,
   idleTimeoutMillis: 30000,
-  connectionTimeoutMillis: 5000
+  connectionTimeoutMillis: 5000,
+  // ADD THIS BLOCK BELOW
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 pool.on('error', function (err) {
