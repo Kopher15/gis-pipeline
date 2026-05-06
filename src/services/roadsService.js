@@ -10,17 +10,17 @@ const ROADS_GEOJSON_SQL = `
   FROM (
     SELECT json_build_object(
       'type', 'Feature',
-      'id', id,
+      'id', "id",
       'geometry', ST_AsGeoJSON(geom)::json,
       'properties', json_build_object(
-        'r_name', r_name,
-        'r_con', r_con,
-        'district', district,
-        'brgy_name', brgy_name,
-        'r_length', r_length,
-        'r_class', r_class,
-        'r_importan', r_importan,
-        's_type', s_type
+        'r_name', "r_name",
+        'r_con', "r_con",
+        'district', "district",
+        'brgy_name', "brgy_name",
+        'r_length', "r_length", 
+        'r_class', "r_class",
+        'r_importan', "r_importan",
+        's_type', "s_type"
       )
     ) AS feature
     FROM public.road_inventory
@@ -28,11 +28,9 @@ const ROADS_GEOJSON_SQL = `
   ) AS features_subquery;
 `;
 
-// Make sure this function name is spelled EXACTLY like this
 async function getAllRoadsAsGeoJSON() {
   const result = await pool.query(ROADS_GEOJSON_SQL);
   return result.rows[0].geojson;
 }
 
-// And make sure it is exported here
 module.exports = { getAllRoadsAsGeoJSON };
