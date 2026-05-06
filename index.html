@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roads and Bridges Inventory — City of Cebu DEPW</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        :root{
+            --navy:#1a2a5e;--navy2:#1e3a7a;--navy3:#2b4fa8;
+            --gold:#f5c518;
+            --bad:#e53935;--poor:#fb8c00;--fair:#e5c200;--good:#43a047;--inspect:#78909c;
+            --surface:#f4f6fb;--surface2:#eaf0ff;--white:#fff;
+            --text:#1a2a5e;--muted:#6b7a9e;--border:#d0daee;
+            --shadow:0 2px 16px rgba(26,42,94,.09);--r:14px;
+        }
+        *{box-sizing:border-box;margin:0;padding:0}
+        html{scroll-behavior:smooth}
+        body{font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh}
+
+        /* HEADER */
+        .hdr{background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 55%,var(--navy3) 100%);
+            color:#fff;padding:0 28px;display:flex;align-items:center;gap:16px;
+            box-shadow:0 4px 20px rgba(26,42,94,.3);position:sticky;top:0;z-index:200;min-height:72px}
+        .hdr-logos{display:flex;align-items:center;gap:10px;flex-shrink:0}
+        .hdr-logo{height:50px;width:50px;object-fit:contain}
+        .hdr-div{width:1px;height:36px;background:rgba(255,255,255,.22);flex-shrink:0}
+        .hdr-text{flex:1;min-width:0}
+        .hdr-text h1{font-family:'Barlow Condensed',sans-serif;font-size:1.4rem;font-weight:800;
+            letter-spacing:.04em;text-transform:uppercase;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .hdr-date-inline{font-size:.7rem;color:var(--gold);font-weight:600;margin-top:2px;display:none}
+        .hdr-sub{font-size:.68rem;opacity:.65;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+        .hdr-meta{text-align:right;flex-shrink:0}
+        .hdr-meta .mdate{font-size:.82rem;color:var(--gold);font-weight:700}
+        .hdr-meta .mlabel{font-size:.65rem;opacity:.65}
+
+        /* LOADING */
+        .loading{position:fixed;inset:0;background:rgba(26,42,94,.9);display:flex;align-items:center;
+            justify-content:center;z-index:999;color:#fff;flex-direction:column;gap:16px}
+        .loading.hidden{display:none}
+        .spin{width:48px;height:48px;border:4px solid rgba(255,255,255,.2);border-top-color:var(--gold);
+            border-radius:50%;animation:spin .9s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .load-steps{font-size:.78rem;opacity:.7;margin-top:4px}
+
+        /* MAIN */
+        .main{padding:24px 28px;max-width:1400px;margin:0 auto}
+        .sec{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:800;text-transform:uppercase;
+            letter-spacing:.07em;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+        .sec::before{content:'';display:block;width:4px;height:18px;background:var(--navy3);border-radius:2px}
+
+        /* KPI CARDS */
+        .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(148px,1fr));gap:14px;margin-bottom:28px}
+        .kpi{background:#fff;border-radius:var(--r);padding:18px 16px;box-shadow:var(--shadow);
+            border-top:4px solid var(--navy3);cursor:pointer;transition:transform .15s,box-shadow .15s;user-select:none}
+        .kpi:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(26,42,94,.14)}
+        .kpi.bad{border-top-color:var(--bad)}.kpi.poor{border-top-color:var(--poor)}
+        .kpi.fair{border-top-color:var(--fair)}.kpi.good{border-top-color:var(--good)}
+        .kpi.inspect{border-top-color:var(--inspect)}.kpi.cost{border-top-color:var(--gold)}
+        .kpi-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:6px}
+        .kpi-val{font-family:'Barlow Condensed',sans-serif;font-size:1.9rem;font-weight:800;color:var(--navy);line-height:1}
+        .kpi-sub{font-size:.68rem;color:var(--muted);margin-top:4px}
+        .kpi-hint{font-size:.62rem;color:var(--navy3);margin-top:6px;opacity:.8}
+        .kpi-hint::before{content:"👆 "}
+
+        /* MODAL */
+        .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;
+            align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto}
+        .modal-bg.open{display:flex}
+        .modal{background:#fff;border-radius:var(--r);width:100%;max-width:960px;
+            box-shadow:0 16px 60px rgba(0,0,0,.25);overflow:hidden;margin:auto}
+        .modal-hdr{background:var(--navy);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between}
+        .modal-hdr h2{font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em}
+        .modal-close{background:none;border:none;color:#fff;font-size:1.4rem;cursor:pointer;line-height:1;padding:0 4px}
+        .modal-body{padding:20px;max-height:72vh;overflow-y:auto}
+
+        /* CHARTS */
+        .charts-grid{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:18px;margin-bottom:28px}
+        .chart-card{background:#fff;border-radius:var(--r);padding:18px;box-shadow:var(--shadow)}
+        .chart-title{font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:14px}
+        .chart-box{position:relative;height:210px}
+
+        /* DISTRICT CARDS */
+        .dist-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:28px}
+        .dist-card{background:#fff;border-radius:var(--r);padding:16px;box-shadow:var(--shadow);border-left:5px solid var(--navy3)}
+        .dist-card.north{border-left-color:#1565c0}.dist-card.south{border-left-color:#2e7d32}.dist-card.unspec{border-left-color:var(--muted)}
+        .dist-name{font-family:'Barlow Condensed',sans-serif;font-size:1rem;font-weight:800;color:var(--navy);text-transform:uppercase;margin-bottom:8px}
+        .dist-stats{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+        .ds{font-size:.72rem}.ds-v{font-weight:700;color:var(--navy)}.ds-l{color:var(--muted)}
+        .cond-bar{display:flex;height:7px;border-radius:4px;overflow:hidden;gap:1px;margin-top:8px}
+        .cb-bad{background:var(--bad)}.cb-poor{background:var(--poor)}.cb-fair{background:var(--fair)}.cb-good{background:var(--good)}
+
+        /* TABLE */
+        .tbl-card{background:#fff;border-radius:var(--r);box-shadow:var(--shadow);overflow:hidden;margin-bottom:28px}
+        .tbl-toolbar{padding:14px 18px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+        .tbl-toolbar h3{font-family:'Barlow Condensed',sans-serif;font-size:.95rem;font-weight:800;text-transform:uppercase;
+            letter-spacing:.05em;color:var(--navy);flex:1;min-width:140px}
+        .srch{border:1.5px solid var(--border);border-radius:8px;padding:6px 11px;font-size:.8rem;
+            font-family:inherit;color:var(--text);outline:none;width:190px;background:var(--surface);transition:border-color .15s}
+        .srch:focus{border-color:var(--navy3)}
+        .sel{border:1.5px solid var(--border);border-radius:8px;padding:6px 9px;font-size:.8rem;
+            font-family:inherit;color:var(--text);outline:none;background:var(--surface);cursor:pointer}
+        .btn{background:var(--navy);color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:.78rem;
+            font-family:inherit;cursor:pointer;font-weight:700;transition:background .15s;display:flex;align-items:center;gap:5px}
+        .btn:hover{background:var(--navy3)}
+        .tbl-wrap{overflow-x:auto}
+        table{width:100%;border-collapse:collapse;font-size:.78rem}
+        th{background:var(--navy);color:#fff;padding:9px 12px;text-align:left;
+            font-family:'Barlow Condensed',sans-serif;font-weight:700;letter-spacing:.04em;font-size:.74rem;
+            text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap}
+        th:hover{background:var(--navy3)}
+        td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+        tr:hover>td{background:var(--surface2)}
+        tr:last-child>td{border-bottom:none}
+        .nr{text-align:right}
+        .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.67rem;font-weight:700;text-transform:uppercase}
+        .bg-bad{background:#fdecea;color:#c62828}.bg-poor{background:#fff3e0;color:#e65100}
+        .bg-fair{background:#fffde7;color:#b8860b}.bg-good{background:#e8f5e9;color:#2e7d32}
+        .bg-insp{background:#eceff1;color:#546e7a}
+        .expand-btn{background:none;border:none;cursor:pointer;font-size:.85rem;color:var(--navy3);
+            padding:0 4px;transition:transform .2s;display:inline-block}
+        .expand-btn.open{transform:rotate(90deg)}
+        .seg-row.hidden{display:none}
+        .seg-row td{background:#f8faff;font-size:.72rem;padding:6px 12px}
+
+        /* PAGINATION */
+        .pagi{display:flex;align-items:center;gap:5px;padding:12px 18px;border-top:1px solid var(--border);
+            justify-content:flex-end;flex-wrap:wrap}
+        .pg-btn{border:1.5px solid var(--border);background:#fff;border-radius:6px;padding:4px 9px;
+            font-size:.74rem;cursor:pointer;font-family:inherit;color:var(--text);transition:all .15s}
+        .pg-btn:hover{background:var(--surface2);border-color:var(--navy3)}
+        .pg-btn.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+
+        /* MODAL TABLE */
+        .mtbl{width:100%;border-collapse:collapse;font-size:.8rem;margin-top:10px}
+        .mtbl th{background:var(--navy);color:#fff;padding:8px 12px;text-align:left;
+            font-size:.74rem;font-family:'Barlow Condensed',sans-serif;letter-spacing:.04em;cursor:pointer;user-select:none}
+        .mtbl th:hover{background:var(--navy3)}
+        .mtbl td{padding:7px 12px;border-bottom:1px solid var(--border)}
+        .mtbl tr:hover td{background:var(--surface2)}
+        .mtbl tr:last-child td{border-bottom:none}
+        .mstats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:16px}
+        .mstat{background:var(--surface);border-radius:8px;padding:10px 12px}
+        .mstat-v{font-family:'Barlow Condensed',sans-serif;font-size:1.5rem;font-weight:800;color:var(--navy)}
+        .mstat-l{font-size:.68rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+
+        /* ERROR BANNER */
+        .err-banner{background:#fff3e0;border:1.5px solid #fb8c00;border-radius:10px;
+            padding:14px 18px;margin-bottom:20px;font-size:.82rem;color:#7f4600;display:none}
+        .err-banner.show{display:block}
+
+        footer{text-align:center;padding:18px;font-size:.68rem;color:var(--muted);border-top:1px solid var(--border)}
+        footer a{color:var(--navy3)}
+
+        /* RESPONSIVE */
+        @media(max-width:1100px){.charts-grid{grid-template-columns:1fr 1fr}}
+        @media(max-width:860px){.dist-grid{grid-template-columns:1fr 1fr}.charts-grid{grid-template-columns:1fr}}
+        @media(max-width:600px){
+            .hdr{padding:0 12px;gap:10px;min-height:66px}
+            .hdr-logo{height:40px;width:40px}
+            .hdr-text h1{font-size:1rem}
+            .hdr-date-inline{display:block}
+            .hdr-meta{display:none}
+            .main{padding:14px 12px}
+            .kpi-grid{grid-template-columns:1fr 1fr;gap:10px}
+            .dist-grid{grid-template-columns:1fr}
+        }
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .fi{animation:fadeIn .35s ease forwards}
+
+        /* ── ROAD NAME LINK ── */
+        .rd-name-link{
+            color:var(--navy);font-weight:700;text-decoration:none;
+            border-bottom:1px dashed rgba(26,42,94,.35);transition:all .12s
+        }
+        .rd-name-link:hover{
+            color:var(--navy3);border-bottom-color:var(--navy3);
+            background:rgba(43,79,168,.06);padding:1px 4px;margin:-1px -4px;border-radius:3px
+        }
+
+        /* ── VIEW ON MAP BUTTON ── */
+        .btn-view-seg{
+            background:var(--navy);color:#fff;border:none;
+            padding:4px 10px;border-radius:4px;font-size:.7rem;font-weight:600;
+            cursor:pointer;font-family:'DM Sans',sans-serif;
+            text-transform:uppercase;letter-spacing:.03em;transition:all .12s
+        }
+        .btn-view-seg:hover{background:var(--navy3);transform:translateY(-1px);box-shadow:0 2px 6px rgba(43,79,168,.3)}
+        .btn-view-seg:active{transform:translateY(0)}
+
+        /* ── MAP MODAL ── */
+        .map-modal-overlay{
+            position:fixed;inset:0;background:rgba(10,18,40,.78);z-index:2000;
+            display:none;align-items:center;justify-content:center;backdrop-filter:blur(3px)
+        }
+        .map-modal-overlay.open{display:flex}
+        .map-modal-panel{
+            width:90vw;height:88vh;background:#fff;border-radius:14px;
+            box-shadow:0 20px 60px rgba(0,0,0,.5);overflow:hidden;
+            display:flex;flex-direction:column;animation:fadeIn .25s ease
+        }
+        .map-modal-header{
+            background:linear-gradient(135deg,var(--navy) 0%,var(--navy2) 100%);
+            color:#fff;padding:12px 20px;display:flex;align-items:center;
+            justify-content:space-between;flex-shrink:0
+        }
+        .map-modal-header h2{
+            font-family:'Barlow Condensed',sans-serif;font-size:1.2rem;
+            font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin:0
+        }
+        .map-modal-close{
+            background:rgba(255,255,255,.15);color:#fff;border:none;
+            width:34px;height:34px;border-radius:50%;font-size:1.1rem;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;transition:background .15s
+        }
+        .map-modal-close:hover{background:rgba(255,255,255,.3)}
+        .map-modal-body{flex:1;position:relative;background:#e8eef7}
+        #mapModalLeaflet{width:100%;height:100%}
+        .map-status{
+            position:absolute;top:12px;left:12px;z-index:500;
+            background:rgba(255,255,255,.96);padding:8px 14px;border-radius:6px;
+            box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:.82rem;font-weight:600;
+            color:var(--text);max-width:280px
+        }
+        .map-status.error{color:#c00;background:#fff3f3}
+        .map-legend{
+            position:absolute;bottom:18px;right:12px;z-index:500;
+            background:rgba(255,255,255,.96);padding:10px 14px;border-radius:6px;
+            box-shadow:0 2px 8px rgba(0,0,0,.18);font-size:.78rem;line-height:1.7
+        }
+        .map-legend strong{
+            font-family:'Barlow Condensed',sans-serif;text-transform:uppercase;
+            font-size:.85rem;letter-spacing:.04em;color:var(--navy);display:block;margin-bottom:4px
+        }
+        .map-legend i{
+            display:inline-block;width:18px;height:4px;margin-right:8px;vertical-align:middle;border-radius:2px
+        }
+        .btn-open-map{
+            background:var(--gold);color:var(--navy);border:none;padding:8px 14px;
+            border-radius:6px;font-weight:700;font-size:.82rem;cursor:pointer;
+            font-family:'DM Sans',sans-serif;text-transform:uppercase;letter-spacing:.03em;
+            transition:transform .12s,box-shadow .15s
+        }
+        .btn-open-map:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(245,197,24,.4)}
+        @media (max-width:768px){
+            .map-modal-panel{width:100vw;height:100vh;border-radius:0}
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+    <div class="spin"></div>
+    <div style="font-family:'Barlow Condensed',sans-serif;font-size:1.1rem;letter-spacing:.05em">Loading Road Inventory…</div>
+    <div class="load-steps" id="loadStep">Fetching data from Render Cloud…</div>
+</div>
+
+<header class="hdr">
+    <div class="hdr-logos">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b3/Seal_of_Cebu_City.png" class="hdr-logo" alt="Seal">
+        <div class="hdr-div"></div>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/e/e0/DPWH_Logo.svg" class="hdr-logo" alt="DPWH">
+    </div>
+    <div class="hdr-text">
+        <h1>Road Inventory Map · City of Cebu</h1>
+        <div class="hdr-date-inline">Updated: May 2026</div>
+        <div class="hdr-sub">Department of Engineering and Public Works · Planning Division</div>
+    </div>
+    <div class="hdr-meta">
+        <div class="mdate" id="mdate">May 06, 2026</div>
+        <div class="mlabel">Live Inventory Status</div>
+    </div>
+</header>
+
+<main class="main fi">
+    <div class="err-banner" id="errBanner">
+        <strong>⚠️ Data Notice:</strong> <span>Currently showing cached offline data. Live API is unavailable.</span>
+    </div>
+
+    <div class="sec">Network Summary (DEPW Overview)</div>
+    <div class="kpi-grid">
+        <div class="kpi cost" onclick="openMapModal()">
+            <div class="kpi-label">Interactive Map</div>
+            <div class="kpi-val">VISUALIZE</div>
+            <div class="kpi-sub">Geographic Information System</div>
+            <div class="kpi-hint">View Network on Leaflet</div>
+        </div>
+        <div class="kpi good">
+            <div class="kpi-label">Good Condition</div>
+            <div class="kpi-val" id="kpiGood">0.0</div>
+            <div class="kpi-sub">Linear Kilometers</div>
+        </div>
+        <div class="kpi fair">
+            <div class="kpi-label">Fair Condition</div>
+            <div class="kpi-val" id="kpiFair">0.0</div>
+            <div class="kpi-sub">Linear Kilometers</div>
+        </div>
+        <div class="kpi poor">
+            <div class="kpi-label">Poor Condition</div>
+            <div class="kpi-val" id="kpiPoor">0.0</div>
+            <div class="kpi-sub">Linear Kilometers</div>
+        </div>
+        <div class="kpi bad">
+            <div class="kpi-label">Bad Condition</div>
+            <div class="kpi-val" id="kpiBad">0.0</div>
+            <div class="kpi-sub">Linear Kilometers</div>
+        </div>
+    </div>
+
+    <div class="charts-grid">
+        <div class="chart-card">
+            <div class="chart-title">Network Condition Mix</div>
+            <div class="chart-box"><canvas id="condChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Surface Type Distribution</div>
+            <div class="chart-box"><canvas id="surfChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Survey Status (By Segments)</div>
+            <div class="chart-box"><canvas id="survChart"></canvas></div>
+        </div>
+    </div>
+
+    <div class="sec">District Breakdown</div>
+    <div class="dist-grid" id="distGrid"></div>
+
+    <div class="sec">Detailed Road Inventory List</div>
+    <div class="tbl-card">
+        <div class="tbl-toolbar">
+            <h3>Inventory Registry</h3>
+            <select class="sel" id="fCond">
+                <option value="">All Conditions</option>
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+                <option value="Bad">Bad</option>
+                <option value="To Inspect">To Inspect</option>
+            </select>
+            <input type="text" class="srch" id="fSearch" placeholder="Search road name…">
+            <button class="btn" onclick="exportCSV()">Export CSV</button>
+        </div>
+        <div class="tbl-wrap">
+            <table id="rdTable">
+                <thead>
+                    <tr>
+                        <th style="width:40px"></th>
+                        <th onclick="srt('name')">Road Name ⇅</th>
+                        <th onclick="srt('len')">Length (km) ⇅</th>
+                        <th onclick="srt('cond')">Condition ⇅</th>
+                        <th onclick="srt('surf')">Surface ⇅</th>
+                        <th onclick="srt('dist')">District ⇅</th>
+                        <th onclick="srt('brgy')">Barangay(s) ⇅</th>
+                    </tr>
+                </thead>
+                <tbody id="rdBody"></tbody>
+            </table>
+        </div>
+        <div class="pagi" id="rdPagi"></div>
+    </div>
+</main>
+
+<footer>
+    Roads and Bridges Inventory System (RBIS) &nbsp;·&nbsp; Dept. of Engineering and Public Works &nbsp;|&nbsp; Planning Division
+</footer>
+
+<!-- MODALS -->
+<div class="modal-bg" id="modal">
+    <div class="modal">
+        <div class="modal-hdr">
+            <h2 id="mTitle">Road Details</h2>
+            <button class="modal-close" onclick="clsM()">&times;</button>
+        </div>
+        <div class="modal-body" id="mBody"></div>
+    </div>
+</div>
+
+<div class="map-modal-overlay" id="mapModal">
+    <div class="map-modal-panel">
+        <div class="map-modal-header">
+            <h2 id="mapModalTitle">Geospatial Road Network View</h2>
+            <button class="map-modal-close" onclick="closeMapModal()">&times;</button>
+        </div>
+        <div class="map-modal-body">
+            <div id="mapModalLeaflet"></div>
+            <div id="mapStatus" class="map-status">Initializing GIS Engine...</div>
+            <div class="map-legend">
+                <strong>Condition Legend</strong>
+                <div><i class="cb-good"></i> Good</div>
+                <div><i class="cb-fair"></i> Fair</div>
+                <div><i class="cb-poor"></i> Poor</div>
+                <div><i class="cb-bad"></i> Bad</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// API CONFIGURATION
+const MAP_API_URL = 'https://gis-api-v6a1.onrender.com/roads';
+
+let rawSegMap = {}; 
+let rawLoaded = false;
+
+const RATES={
+    Bad:{Asphalt:6500,Concrete:8000,Gravel:3500,Earth:2500,Mixed:5000,Unclassified:5000},
+    Poor:{Asphalt:1800,Concrete:2200,Gravel:900,Earth:700,Mixed:1200,Unclassified:1500},
+    Fair:{Asphalt:350,Concrete:350,Gravel:350,Earth:350,Mixed:350,Unclassified:350},
+    Good:{Asphalt:0,Concrete:0,Gravel:0,Earth:0,Mixed:0,Unclassified:0},
+    "To Inspect":{Asphalt:0,Concrete:0,Gravel:0,Earth:0,Mixed:0,Unclassified:0}
+};
+
+let ALL=[], FLT=[], PG=1, SZ=15, SRT={c:'name',d:1}, CHS={};
+
+const mapState = {
+    initialized: false,
+    map: null,
+    roadsLayer: null,
+    geoLoaded: false,
+    geojson: null,
+    baseLayers: {}
+};
+
+async function init(){
+    const l=document.getElementById('loading');
+    const s=document.getElementById('loadStep');
+    try{
+        s.innerText='Synchronizing with Render Cloud API…';
+        const r=await fetch(MAP_API_URL);
+        if(!r.ok) throw new Error('API Error');
+        const g=await r.json();
+        process(g);
+        l.classList.add('hidden');
+    } catch(e){
+        console.error(e);
+        s.innerText='Critical Error: API Offline.';
+        document.getElementById('errBanner').classList.add('show');
+    }
+}
+
+function process(g){
+    const m=new Map();
+    g.features.forEach(f=>{
+        const p=f.properties;
+        const n=(p.r_name||'Unnamed Road').trim();
+        if(!m.has(n)) m.set(n,{name:n,len:0,segments:[],district:p.district||'Unspecified',brgy:new Set()});
+        const r=m.get(n);
+        const l=parseFloat(p.l_new||0);
+        r.len+=l;
+        r.segments.push(p);
+        if(p.brgy_name) r.brgy.add(p.brgy_name);
+    });
+    ALL=Array.from(m.values()).map(r=>{
+        const c=calc(r.segments);
+        const s=domS(r.segments);
+        return {...r,cond:c,surf:s,brgy:Array.from(r.brgy).join(', ')};
+    });
+    FLT=[...ALL];
+    update();
+}
+
+function calc(ss){
+    let max=0, res='To Inspect';
+    const wt={Good:1,Fair:2,Poor:3,Bad:4,'To Inspect':0};
+    ss.forEach(s=>{
+        const cur=s.r_con||'To Inspect';
+        if(wt[cur]>max){max=wt[cur];res=cur}
+    });
+    return res;
+}
+
+function domS(ss){
+    const f={};
+    ss.forEach(s=>{const t=s.s_type||'Unclassified';f[t]=(f[t]||0)+parseFloat(s.l_new||0)});
+    return Object.entries(f).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+function update(){
+    renderKPI();
+    renderCharts();
+    renderDist();
+    renderTable();
+}
+
+function renderKPI(){
+    let g=0,f=0,p=0,b=0;
+    ALL.forEach(r=>{
+        if(r.cond==='Good')g+=r.len;
+        else if(r.cond==='Fair')f+=r.len;
+        else if(r.cond==='Poor')p+=r.len;
+        else if(r.cond==='Bad')b+=r.len;
+    });
+    document.getElementById('kpiGood').innerText=g.toFixed(2);
+    document.getElementById('kpiFair').innerText=f.toFixed(2);
+    document.getElementById('kpiPoor').innerText=p.toFixed(2);
+    document.getElementById('kpiBad').innerText=b.toFixed(2);
+}
+
+function renderCharts(){
+    const ctxC=document.getElementById('condChart').getContext('2d');
+    const cD={Good:0,Fair:0,Poor:0,Bad:0,'To Inspect':0};
+    ALL.forEach(r=>cD[r.cond]+=r.len);
+    if(CHS.c) CHS.c.destroy();
+    CHS.c=new Chart(ctxC,{type:'doughnut',data:{labels:Object.keys(cD),datasets:[{data:Object.values(cD),backgroundColor:['#43a047','#e5c200','#fb8c00','#e53935','#78909c']}]},options:{maintainAspectRatio:false}});
+
+    const ctxS=document.getElementById('surfChart').getContext('2d');
+    const sD={};
+    ALL.forEach(r=>sD[r.surf]=(sD[r.surf]||0)+r.len);
+    if(CHS.s) CHS.s.destroy();
+    CHS.s=new Chart(ctxS,{type:'bar',data:{labels:Object.keys(sD),datasets:[{label:'Kilometers',data:Object.values(sD),backgroundColor:'#2b4fa8'}]},options:{maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}});
+
+    const ctxV=document.getElementById('survChart').getContext('2d');
+    let done=0, pending=0;
+    ALL.forEach(r=>{if(r.cond==='To Inspect')pending++; else done++});
+    if(CHS.v) CHS.v.destroy();
+    CHS.v=new Chart(ctxV,{type:'pie',data:{labels:['Surveyed','Pending'],datasets:[{data:[done,pending],backgroundColor:['#1a2a5e','#d0daee']}]},options:{maintainAspectRatio:false}});
+}
+
+function renderDist(){
+    const g=document.getElementById('distGrid');
+    g.innerHTML='';
+    const d={};
+    ALL.forEach(r=>{
+        if(!d[r.district]) d[r.district]={len:0,cond:{Good:0,Fair:0,Poor:0,Bad:0,'To Inspect':0},type:r.district.toLowerCase().includes('north')?'north':'south'};
+        d[r.district].len+=r.len;
+        d[r.district].cond[r.cond]+=r.len;
+    });
+    Object.entries(d).forEach(([n,s])=>{
+        const p=(s.cond.Good/s.len*100).toFixed(0);
+        const div=document.createElement('div');
+        div.className=`dist-card ${s.type}`;
+        div.innerHTML=`
+            <div class="dist-name">${n}</div>
+            <div class="dist-stats">
+                <div class="ds"><span class="ds-l">Total km:</span> <span class="ds-v">${s.len.toFixed(1)}</span></div>
+                <div class="ds"><span class="ds-l">Good:</span> <span class="ds-v">${p}%</span></div>
+            </div>
+            <div class="cond-bar">
+                <div class="cb-bad" style="width:${s.cond.Bad/s.len*100}%"></div>
+                <div class="cb-poor" style="width:${s.cond.Poor/s.len*100}%"></div>
+                <div class="cb-fair" style="width:${s.cond.Fair/s.len*100}%"></div>
+                <div class="cb-good" style="width:${s.cond.Good/s.len*100}%"></div>
+            </div>
+        `;
+        g.appendChild(div);
+    });
+}
+
+function renderTable(){
+    const b=document.getElementById('rdBody');
+    const p=document.getElementById('rdPagi');
+    b.innerHTML='';
+    const start=(PG-1)*SZ;
+    const end=start+SZ;
+    const page=FLT.slice(start,end);
+
+    page.forEach(r=>{
+        const tr=document.createElement('tr');
+        tr.innerHTML=`
+            <td><button class="expand-btn" onclick="tglSeg('${r.name.replace(/'/g,"\\'")}', this)">▶</button></td>
+            <td><a href="#" class="rd-name-link" onclick="openRoadModal('${r.name.replace(/'/g,"\\'")}')">${r.name}</a></td>
+            <td class="nr">${r.len.toFixed(3)}</td>
+            <td><span class="badge bg-${r.cond.toLowerCase().slice(0,4)}">${r.cond}</span></td>
+            <td>${r.surf}</td>
+            <td>${r.district}</td>
+            <td style="font-size:.65rem;color:var(--muted)">${r.brgy}</td>
+        `;
+        b.appendChild(tr);
+        const sr=document.createElement('tr');
+        sr.className='seg-row hidden';
+        sr.id=`seg-${r.name}`;
+        sr.innerHTML=`<td colspan="7"><div id="cont-${r.name}" style="padding:10px">Loading segments...</div></td>`;
+        b.appendChild(sr);
+    });
+
+    const total=Math.ceil(FLT.length/SZ);
+    p.innerHTML='';
+    for(let i=1;i<=total;i++){
+        if(i>10 && i<total-2) { if(i==11) p.innerHTML+='<span>...</span>'; continue; }
+        const btn=document.createElement('button');
+        btn.className=`pg-btn ${i===PG?'active':''}`;
+        btn.innerText=i;
+        btn.onclick=()=>{PG=i;renderTable()};
+        p.appendChild(btn);
+    }
+}
+
+function tglSeg(n,btn){
+    const r=document.getElementById(`seg-${n}`);
+    const c=document.getElementById(`cont-${n}`);
+    r.classList.toggle('hidden');
+    btn.classList.toggle('open');
+    if(!r.classList.contains('hidden')){
+        const road=ALL.find(x=>x.name===n);
+        let h='<table style="width:100%;background:#fff;border-radius:6px;overflow:hidden"><thead><tr style="background:#f0f4ff"><th style="color:var(--navy);background:none">Segment ID</th><th style="color:var(--navy);background:none">km</th><th style="color:var(--navy);background:none">Cond.</th><th style="color:var(--navy);background:none">Surface</th><th style="color:var(--navy);background:none">Action</th></tr></thead><tbody>';
+        road.segments.forEach(s=>{
+            h+=`<tr>
+                <td>${s.r_id}</td>
+                <td>${parseFloat(s.l_new).toFixed(3)}</td>
+                <td><span class="badge bg-${(s.r_con||'insp').toLowerCase().slice(0,4)}">${s.r_con}</span></td>
+                <td>${s.s_type}</td>
+                <td><button class="btn-view-seg" onclick="viewOnMap('${s.r_id}')">Map</button></td>
+            </tr>`;
+        });
+        h+='</tbody></table>';
+        c.innerHTML=h;
+    }
+}
+
+function srt(col){
+    if(SRT.c===col) SRT.d*=-1; else {SRT.c=col;SRT.d=1}
+    FLT.sort((a,b)=>{
+        let vA=a[col], vB=b[col];
+        if(col==='len') return (vA-vB)*SRT.d;
+        return vA.toString().localeCompare(vB.toString())*SRT.d;
+    });
+    renderTable();
+}
+
+document.getElementById('fSearch').oninput=(e)=>{
+    const v=e.target.value.toLowerCase();
+    FLT=ALL.filter(r=>r.name.toLowerCase().includes(v));
+    PG=1;renderTable();
+};
+
+document.getElementById('fCond').onchange=(e)=>{
+    const v=e.target.value;
+    FLT=v?ALL.filter(r=>r.cond===v):[...ALL];
+    PG=1;renderTable();
+};
+
+function clsM(){document.getElementById('modal').classList.remove('open')}
+function clsMap(){document.getElementById('mapModal').classList.remove('open')}
+
+function openRoadModal(n){
+    const r=ALL.find(x=>x.name===n);
+    document.getElementById('mTitle').innerText=r.name;
+    let h=`
+        <div class="mstats">
+            <div class="mstat"><div class="mstat-v">${r.len.toFixed(2)}</div><div class="mstat-l">Total km</div></div>
+            <div class="mstat"><div class="mstat-v">${r.segments.length}</div><div class="mstat-l">Segments</div></div>
+            <div class="mstat"><div class="mstat-v">${r.district}</div><div class="mstat-l">District</div></div>
+        </div>
+        <table class="mtbl">
+            <thead><tr><th>ID</th><th>Length</th><th>Condition</th><th>Surface</th><th>Width</th></tr></thead>
+            <tbody>
+    `;
+    r.segments.forEach(s=>{
+        h+=`<tr><td>${s.r_id}</td><td>${s.l_new}</td><td>${s.r_con}</td><td>${s.s_type}</td><td>${s.r_width}m</td></tr>`;
+    });
+    h+='</tbody></table>';
+    document.getElementById('mBody').innerHTML=h;
+    document.getElementById('modal').classList.add('open');
+}
+
+function exportCSV(){
+    let c='Road Name,Length (km),Condition,Surface,District,Barangays\n';
+    FLT.forEach(r=>c+=`"${r.name}",${r.len},${r.cond},${r.surf},${r.district},"${r.brgy}"\n`);
+    const b=new Blob([c],{type:'text/csv'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(b);
+    a.download='Cebu_Road_Inventory.csv';
+    a.click();
+}
+
+function buildBasemaps(){
+    return {
+        'Streets': L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap'
+        }),
+        'Satellite': L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            attribution: '© Esri'
+        })
+    };
+}
+
+function setMapStatus(msg, isError=false){
+    const el = document.getElementById('mapStatus');
+    el.innerText = msg;
+    el.className = isError ? 'map-status error' : 'map-status';
+}
+
+function initMap(){
+    if(mapState.initialized) return;
+    mapState.baseLayers = buildBasemaps();
+    mapState.map = L.map('mapModalLeaflet', {
+        center: [10.3157, 123.8854],
+        zoom: 12,
+        layers: [mapState.baseLayers['Streets']]
+    });
+    L.control.layers(mapState.baseLayers, {}, { position: 'topright', collapsed: false })
+        .addTo(mapState.map);
+    mapState.initialized = true;
+}
+
+function loadGeoJSON(){
+    if(mapState.geoLoaded) return Promise.resolve(mapState.geojson);
+    setMapStatus('Fetching road data from API...');
+    return fetch(MAP_API_URL)
+        .then(function(resp){
+            if(!resp.ok) throw new Error('HTTP ' + resp.status);
+            return resp.json();
+        })
+        .then(function(geo){
+            mapState.geojson = geo;
+            var count = (geo.features || []).length;
+            setMapStatus('Rendering ' + count.toLocaleString() + ' road segments...');
+            mapState.roadsLayer = L.geoJSON(geo, {
+                style: defaultStyle,
+                onEachFeature: function(feature, layer){
+                    var p = feature.properties || {};
+                    var html = '<table style="font-size:13px;border-collapse:collapse;width:180px">';
+                    html += '<tr><td style="padding:2px 8px;font-weight:600">Road</td><td style="padding:2px 8px">' + (p.r_name || 'N/A') + '</td></tr>';
+                    html += '<tr><td style="padding:2px 8px;font-weight:600">Condition</td><td style="padding:2px 8px">' + (p.r_con || 'N/A') + '</td></tr>';
+                    html += '<tr><td style="padding:2px 8px;font-weight:600">District</td><td style="padding:2px 8px">' + (p.district || 'N/A') + '</td></tr>';
+                    html += '<tr><td style="padding:2px 8px;font-weight:600">Length</td><td style="padding:2px 8px">' + (p.l_new || 0) + ' km</td></tr>';
+                    html += '</table>';
+                    layer.bindPopup(html);
+                }
+            }).addTo(mapState.map);
+            mapState.geoLoaded = true;
+            setMapStatus('GIS Layer Active (' + count + ' segments)');
+            return geo;
+        })
+        .catch(function(err){
+            setMapStatus('GIS Error: ' + err.message, true);
+            console.error('GIS Error:', err);
+        });
+}
+
+function defaultStyle(feature){
+    var c = feature.properties.r_con || '';
+    var color = '#78909c';
+    if(c === 'Good') color = '#43a047';
+    else if(c === 'Fair') color = '#e5c200';
+    else if(c === 'Poor') color = '#fb8c00';
+    else if(c === 'Bad') color = '#e53935';
+    return { color: color, weight: 3, opacity: 0.85 };
+}
+
+function openMapModal(){
+    document.getElementById('mapModal').classList.add('open');
+    setTimeout(function(){
+        initMap();
+        loadGeoJSON().then(function(){
+            mapState.map.invalidateSize();
+        });
+    }, 100);
+}
+
+function closeMapModal(){
+    document.getElementById('mapModal').classList.remove('open');
+}
+
+function viewOnMap(segmentId){
+    openMapModal();
+    setTimeout(function(){
+        if(!mapState.geoLoaded) return;
+        var layer = null;
+        mapState.roadsLayer.eachLayer(function(l){
+            if(l.feature.properties.r_id === segmentId) layer = l;
+        });
+        if(layer){
+            mapState.map.fitBounds(layer.getBounds(), { padding: [50, 50], maxZoom: 17 });
+            layer.openPopup();
+        }
+    }, 500);
+}
+
+init();
+</script>
+</body>
+</html>
