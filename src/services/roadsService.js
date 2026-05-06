@@ -13,14 +13,14 @@ const ROADS_GEOJSON_SQL =
       "'id', id, " +
       "'geometry', ST_AsGeoJSON(geom)::json, " +
       "'properties', json_build_object(" +
-        "'r_name', \"r_name\", " +         // Added double quotes
-        "'r_con', \"r_con\", " +           // Added double quotes
-        "'district', \"district\", " +     // Added double quotes
-        "'brgy_name', \"brgy_name\", " +   // Added double quotes
-        "'r_length', \"r_length\", " +     // This fixes the r_length error
-        "'r_class', \"r_class\", " +       // Added double quotes
-        "'r_importan', \"r_importan\", " + // Added double quotes
-        "'s_type', \"s_type\"" +           // Added double quotes
+        "'r_name', \"r_name\", " +         // Use \" for column names
+        "'r_con', \"r_con\", " +           // Use \" for column names
+        "'district', \"district\", " +     // Use \" for column names
+        "'brgy_name', \"brgy_name\", " +   // Use \" for column names
+        "'r_length', \"r_length\", " +     // CRITICAL: This fixes the r_length error
+        "'r_class', \"r_class\", " +       // Use \" for column names
+        "'r_importan', \"r_importan\", " + // Use \" for column names
+        "'s_type', \"s_type\"" +           // Use \" for column names
       ')' +
     ') AS feature ' +
     'FROM public.road_inventory ' +
