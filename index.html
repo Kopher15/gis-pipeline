@@ -981,53 +981,6 @@ function goPage(p){pg=p;renderTable();document.getElementById('tblAnchor').scrol
 function scrollToTable(){document.getElementById('tblAnchor').scrollIntoView({behavior:'smooth'});}
 
 // ── MODALS ──
-
-function buildSegmentConditionSummary(){
-
-  const summary = {
-    bad:{roads:new Set(),segs:0,len:0,cost:0},
-    poor:{roads:new Set(),segs:0,len:0,cost:0},
-    fair:{roads:new Set(),segs:0,len:0,cost:0},
-    good:{roads:new Set(),segs:0,len:0,cost:0}
-  };
-
-  rawSegMap.forEach(seg=>{
-
-    const condRaw = (seg.rcon || '').trim().toLowerCase();
-
-    if(!summary[condRaw]) return;
-
-    const bucket = summary[condRaw];
-
-    const roadName = seg.rname || 'Unnamed Road';
-
-    const lenM = Number(seg.lenm || 0);
-    const lenKm = lenM / 1000;
-
-    const surf = (seg.surf || '').trim();
-
-    const rate =
-      condRaw === 'bad'
-        ? (COST_BAD[surf] || 0)
-      : condRaw === 'poor'
-        ? (COST_POOR[surf] || 0)
-      : condRaw === 'fair'
-        ? COST_FAIR
-      : COST_GOOD;
-
-    const estCost = lenM * ROAD_WIDTH * rate;
-
-    bucket.roads.add(roadName);
-    bucket.segs += 1;
-    bucket.len += lenKm;
-    bucket.cost += estCost;
-
-  });
-
-  return summary;
-}
-
-
 function showModal(type){
   const segs=r=>r.bad+r.poor+r.fair+r.good+r.inspect;
   if(type==='length'){
